@@ -42,6 +42,7 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 
 from codecs import open as codecs_open
 from distutils.util import get_platform
@@ -364,7 +365,7 @@ def _patch_specfile(obfdist, src, specfile, hookpath=None, encoding=None,
     return os.path.normpath(patched_file)
 
 
-def __obfuscate_dependency_pkgs(package_names, obf_options):
+def __obfuscate_dependency_pkgs(package_names, obf_options, temp_dir):
     '''
     Args:
         package_names: List[str] - packages' distribution names
@@ -372,8 +373,6 @@ def __obfuscate_dependency_pkgs(package_names, obf_options):
         temp_dir: str - Path to the temp folder containing the obfuscated pkg codes 
     '''
     src_and_obf_dirs = dict()
-    obf_temp_dir = "/tmp/pyarmor-obf-dep"
-    os.makedirs(obf_temp_dir, exist_ok=True)
 
     for pkg_name in package_names:
         pkg = get_distribution(pkg_name)
@@ -387,7 +386,7 @@ def __obfuscate_dependency_pkgs(package_names, obf_options):
             raise RuntimeError('%s does not have top level modules' % pkg_name)
 
         for module_name in top_modules:
-            obfdist = os.path.join(obf_temp_dir, module_name)
+            obfdist = os.path.join(temp_dir, module_name)
             src_dir = os.path.join(pkg.location, module_name)
             pkg_init_file = os.path.join(src_dir, '__init__.py')
 
@@ -477,8 +476,9 @@ def _pyinstaller(src, entry, output, options, xoptions, args):
         os.makedirs(obftemp)
     
     dep_src_and_obf_dirs = None
+    deps_temp_dir = tempfile.mkdtemp()
     if args.obf_deps:
-        dep_src_and_obf_dirs = __obfuscate_dependency_pkgs(args.obf_deps, xoptions)
+        dep_src_and_obf_dirs = __obfuscate_dependency_pkgs(args.obf_deps, xoptions, deps_temp_dir)
 
     supermode = True
     runmodname = None
@@ -529,6 +529,8 @@ def _pyinstaller(src, entry, output, options, xoptions, args):
         os.remove(patched_spec)
         logging.info('Remove build path %s', obfdist)
         shutil.rmtree(obfdist)
+        logging.info('Remove temp path of obfuscated dependencies %s', deps_temp_dir)
+        shutil.rmtree(deps_temp_dir)
 
 
 def _get_project_entry(project):
